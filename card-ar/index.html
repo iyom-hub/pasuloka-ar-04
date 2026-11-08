@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Magic Cards</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <script>
+    AFRAME.registerComponent('png-sequence', {
+      schema: {
+        folder: {type: 'string'},
+        frameCount: {type: 'number', default: 24},
+        fps: {type: 'number', default: 24},
+        prefix: {type: 'string', default: 'frame'},
+        digits: {type: 'number', default: 3}
+      },
+      init: function () {
+        this.frames = [];
+        this.currentFrame = 0;
+        this.elapsed = 0;
+
+        for (let i = 1; i <= this.data.frameCount; i++) {
+          const num = String(i).padStart(this.data.digits, '0');
+          const img = new Image();
+          img.src = this.data.folder + '/' + this.data.prefix + num + '.png';
+          this.frames.push(img);
+        }
+
+        this.el.setAttribute('material', {
+          shader: 'flat',
+          transparent: true,
+          src: this.frames[0]
+        });
+      },
+      tick: function (time, timeDelta) {
+        if (!this.frames.length) return;
+
+        this.elapsed += timeDelta;
+        const frameDuration = 1000 / this.data.fps;
+
+        if (this.elapsed >= frameDuration) {
+          this.elapsed -= frameDuration;
+          this.currentFrame = (this.currentFrame + 1) % this.frames.length;
+          this.el.setAttribute('material', 'src', this.frames[this.currentFrame]);
+        }
+      }
+    });
+  </script>
+
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: Arial, sans-serif;
+    }
+
+    #scanOverlay {
+      position: absolute;
+      inset: 0;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      background: transparent;
+      transition: opacity 0.25s ease, visibility 0.25s ease;
+      pointer-events: none;
+    }
+
+    #scanOverlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    #scanOverlay.error {
+      padding: 24px;
+      box-sizing: border-box;
+    }
+
+    #scanOverlay.error .loader {
+      display: none;
+    }
+
+    #scanOverlay.error #scanText {
+      max-width: 32rem;
+      padding: 14px 18px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.8);
+      letter-spacing: normal;
+      text-transform: none;
+    }
+
+    .loader {
+      width: 44.8px;
+      height: 44.8px;
+      color: #FFD300;
+      position: relative;
+      background: radial-gradient(11.2px,currentColor 94%,#0000);
+    }
+
+    .loader:before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: radial-gradient(10.08px at bottom right,#0000 94%,currentColor) top left,
+              radial-gradient(10.08px at bottom left ,#0000 94%,currentColor) top right,
+              radial-gradient(10.08px at top right,#0000 94%,currentColor) bottom left,
+              radial-gradient(10.08px at top left ,#0000 94%,currentColor) bottom right;
+      background-size: 22.4px 22.4px;
+      background-repeat: no-repeat;
+      animation: loader 1.5s infinite cubic-bezier(0.3,1,0,1);
+    }
+
+    @keyframes loader {
+      33% {
+        inset: -11.2px;
+        transform: rotate(0deg);
+      }
+
+      66% {
+        inset: -11.2px;
+        transform: rotate(90deg);
+      }
+
+      100% {
+        inset: 0;
+        transform: rotate(90deg);
+      }
+    }
+
+    #status {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      max-width: calc(100% - 32px);
+      box-sizing: border-box;
+      background: rgba(0, 0, 0, 0.45);
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-size: 14px;
+      text-align: center;
+      pointer-events: none;
+    }
+
+    #scanText {
+      font-size: 14px;
+      color: #fff;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      text-align: center;
+      text-shadow: 0 1px 4px #000;
+    }
+
+    .target-marker {
+      visibility: hidden;
+    }
+
+    .target-marker.visible {
+      visibility: visible;
+    }
+  </style>
+</head>
+<body>
+  <div id="status" role="status" aria-live="polite">Scanning target...</div>
+
+  <div id="scanOverlay" role="status" aria-live="polite">
+    <div class="loader" aria-label="Loading"></div>
+    <div id="scanText">Scanning target...</div>
+  </div>
+
+  <a-scene
+    id="scene"
+    mindar-image="imageTargetSrc: ./targets/targets-combined.mind; autoStart: true; uiScanning: no;"
+    color-space="sRGB"
+    renderer="colorManagement: true, physicallyCorrectLights"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: true"
+  >
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <a-entity id="target0" class="target-marker" mindar-image-target="targetIndex: 0" visible="false">
+      <a-plane
+        png-sequence="folder: ./animations/gegana; frameCount: 1; fps: 1"
+        position="0 0.5 0"
+        width="0.15"
+        height="0.15">
+      </a-plane>
+
+      <a-plane
+        png-sequence="folder: ./animations/sky; frameCount: 6; fps: 5"
+        position="0 1 0"
+        width="0.3"
+        height="0.3">
+      </a-plane>
+
+      <a-plane
+        png-sequence="folder: ./animations/grass; frameCount: 4; fps: 4"
+        position="0 0.3 0"
+        width="0.3"
+        height="0.3">
+      </a-plane>
+    </a-entity>
+
+    <a-entity id="target1" class="target-marker" mindar-image-target="targetIndex: 1" visible="false">
+      <a-plane
+        png-sequence="folder: ./animations/meera; frameCount: 1; fps: 1"
+        position="0 0.5 0"
+        width="0.15"
+        height="0.15">
+      </a-plane>
+
+      <a-plane
+        png-sequence="folder: ./animations/sky; frameCount: 6; fps: 5"
+        position="0 1 0"
+        width="0.3"
+        height="0.3">
+      </a-plane>
+
+      <a-plane
+        png-sequence="folder: ./animations/ocean; frameCount: 6; fps: 4"
+        position="0 0.3 0"
+        width="0.3"
+        height="0.3">
+      </a-plane>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const scanOverlay = document.getElementById('scanOverlay');
+    const scanText = document.getElementById('scanText');
+    let cameraReady = false;
+
+    const targetMap = {
+      target0: document.getElementById('target0'),
+      target1: document.getElementById('target1')
+    };
+
+    function setTargetVisible(id, visible) {
+      const el = targetMap[id];
+      if (!el) return;
+      el.setAttribute('visible', visible);
+      el.classList.toggle('visible', visible);
+    }
+
+    function showScanOverlay(message) {
+      scanText.textContent = message || 'Scanning target...';
+      scanOverlay.classList.remove('hidden');
+    }
+
+    function hideScanOverlay() {
+      scanOverlay.classList.add('hidden');
+    }
+
+    function showError(message) {
+      statusEl.textContent = message;
+      statusEl.setAttribute('role', 'alert');
+      scanText.textContent = message;
+      scanOverlay.classList.add('error');
+      scanOverlay.classList.remove('hidden');
+    }
+
+    function updateStatusFromTargets() {
+      const found = Object.keys(targetMap).filter((key) => targetMap[key].getAttribute('visible'));
+
+      if (found.length === 0) {
+        statusEl.textContent = 'Scanning target...';
+        if (cameraReady) {
+          hideScanOverlay();
+        } else {
+          showScanOverlay('Scanning target...');
+        }
+        return;
+      }
+
+      scanOverlay.classList.remove('error');
+      if (found.length === 1) {
+        statusEl.textContent = found[0] === 'target0' ? 'Target 0 detected' : 'Target 1 detected';
+      } else {
+        statusEl.textContent = 'Target 0 and Target 1 detected';
+      }
+
+      hideScanOverlay();
+    }
+
+    Object.keys(targetMap).forEach((key) => {
+      const el = targetMap[key];
+      el.addEventListener('targetFound', () => {
+        setTargetVisible(key, true);
+        updateStatusFromTargets();
+      });
+
+      el.addEventListener('targetLost', () => {
+        setTargetVisible(key, false);
+        updateStatusFromTargets();
+      });
+    });
+
+    const sceneEl = document.getElementById('scene');
+    const openedAsFile = window.location.protocol === 'file:';
+    sceneEl.addEventListener('arReady', () => {
+      if (openedAsFile) return;
+
+      cameraReady = true;
+      scanOverlay.classList.remove('error');
+      statusEl.setAttribute('role', 'status');
+      statusEl.textContent = 'Scanning target...';
+      hideScanOverlay();
+    });
+
+    sceneEl.addEventListener('arError', (event) => {
+      const error = event.detail?.error || event.detail;
+      const reason = error instanceof Error ? error.message : String(error || 'Unknown error');
+      showError(`Kamera/AR tidak dapat dimulai: ${reason}`);
+    });
+
+    showScanOverlay('Starting camera...');
+    if (openedAsFile) {
+      showError('Jangan buka file langsung. Jalankan lewat localhost atau HTTPS.');
+    } else if (!window.isSecureContext) {
+      showError('Akses kamera memerlukan HTTPS atau localhost.');
+    } else if (!navigator.mediaDevices?.getUserMedia) {
+      showError('Browser ini tidak mendukung akses kamera.');
+    } else if (navigator.permissions?.query) {
+      navigator.permissions.query({ name: 'camera' })
+        .then((permission) => {
+          if (permission.state === 'denied' && !cameraReady) {
+            showError('Izin kamera diblokir. Izinkan kamera untuk situs ini di Chrome, lalu muat ulang halaman.');
+          }
+        })
+        .catch((error) => {
+          console.error('Gagal memeriksa izin kamera:', error);
+        });
+    }
+  </script>
+</body>
+</html>

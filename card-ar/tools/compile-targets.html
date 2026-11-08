@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MindAR Target Compiler</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Arial, sans-serif;
+      background: #101218;
+      color: #f4f5f7;
+    }
+
+    body {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 32px 20px;
+    }
+
+    h1 {
+      margin-top: 0;
+    }
+
+    p, li {
+      line-height: 1.5;
+      color: #c7cad1;
+    }
+
+    .card {
+      margin: 20px 0;
+      padding: 18px;
+      border: 1px solid #343946;
+      border-radius: 12px;
+      background: #191d26;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+
+    input[type="file"] {
+      width: 100%;
+    }
+
+    button {
+      padding: 12px 18px;
+      border: 0;
+      border-radius: 8px;
+      background: #ffd300;
+      color: #161616;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      cursor: wait;
+      opacity: 0.6;
+    }
+
+    progress {
+      width: 100%;
+      height: 18px;
+      margin-top: 18px;
+      accent-color: #ffd300;
+    }
+
+    #status {
+      min-height: 24px;
+      margin-top: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .error {
+      color: #ff8e8e !important;
+    }
+  </style>
+</head>
+<body>
+  <h1>Gabungkan target MindAR</h1>
+  <p>
+    Pilih gambar sumber marker yang sama dengan gambar saat membuat
+    <code>targets0.mind</code> dan <code>targets1.mind</code>. File keluaran
+    berisi dua target: gambar Target 0 menjadi <code>targetIndex: 0</code>,
+    lalu gambar Target 1 menjadi <code>targetIndex: 1</code>.
+  </p>
+  <p>
+    File <code>.mind</code> yang sudah jadi tidak dapat digabung langsung.
+    Proses ini memerlukan gambar sumber aslinya.
+  </p>
+
+  <div class="card">
+    <label for="target0">Gambar sumber Target 0</label>
+    <input id="target0" type="file" accept="image/*" />
+  </div>
+
+  <div class="card">
+    <label for="target1">Gambar sumber Target 1</label>
+    <input id="target1" type="file" accept="image/*" />
+  </div>
+
+  <button id="compile" type="button">Buat targets-combined.mind</button>
+  <progress id="progress" max="100" value="0" hidden></progress>
+  <p id="status" role="status" aria-live="polite"></p>
+
+  <script type="module">
+    const target0Input = document.getElementById('target0');
+    const target1Input = document.getElementById('target1');
+    const compileButton = document.getElementById('compile');
+    const progressEl = document.getElementById('progress');
+    const statusEl = document.getElementById('status');
+    let Compiler;
+
+    try {
+      ({ Compiler } = await import(
+        'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js'
+      ));
+    } catch (error) {
+      compileButton.disabled = true;
+      statusEl.textContent = `Gagal memuat MindAR Compiler: ${
+        error instanceof Error ? error.message : String(error)
+      }`;
+      statusEl.classList.add('error');
+    }
+
+    function loadImage(file) {
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        const objectUrl = URL.createObjectURL(file);
+
+        image.onload = () => resolve({ image, objectUrl });
+        image.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          reject(new Error(`Gagal membaca gambar "${file.name}".`));
+        };
+        image.src = objectUrl;
+      });
+    }
+
+    compileButton.addEventListener('click', async () => {
+      const target0File = target0Input.files[0];
+      const target1File = target1Input.files[0];
+
+      statusEl.classList.remove('error');
+      if (!target0File || !target1File) {
+        statusEl.textContent = 'Pilih gambar sumber untuk Target 0 dan Target 1.';
+        statusEl.classList.add('error');
+        return;
+      }
+
+      compileButton.disabled = true;
+      progressEl.hidden = false;
+      progressEl.value = 0;
+      statusEl.textContent = 'Memuat gambar...';
+
+      const objectUrls = [];
+
+      try {
+        const target0 = await loadImage(target0File);
+        objectUrls.push(target0.objectUrl);
+        const target1 = await loadImage(target1File);
+        objectUrls.push(target1.objectUrl);
+
+        statusEl.textContent = 'Menyusun target 0 dan target 1...';
+        const compiler = new Compiler();
+        await compiler.compileImageTargets(
+          [target0.image, target1.image],
+          (percent) => {
+            progressEl.value = Math.min(100, Math.round(percent));
+            statusEl.textContent = `Mengompilasi target... ${progressEl.value}%`;
+          }
+        );
+
+        const mindData = compiler.exportData();
+        const downloadUrl = URL.createObjectURL(
+          new Blob([mindData], { type: 'application/octet-stream' })
+        );
+        const downloadLink = document.createElement('a');
+        downloadLink.href = downloadUrl;
+        downloadLink.download = 'targets-combined.mind';
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        downloadLink.remove();
+        window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+
+        progressEl.value = 100;
+        statusEl.textContent = 'Selesai. Pindahkan targets-combined.mind ke folder targets/.';
+      } catch (error) {
+        statusEl.textContent = error instanceof Error ? error.message : String(error);
+        statusEl.classList.add('error');
+      } finally {
+        objectUrls.forEach((url) => URL.revokeObjectURL(url));
+        compileButton.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
